@@ -3,6 +3,10 @@
 while (<>) {
 	@words = split( /\s+/, $_ );
 	foreach $word ( @words ) {
-		print "$word\t1\n";
+		$count{ $word }++;
 	}
+}
+
+foreach $word ( keys( %count ) ) {
+	print "$word\t$count{ $word }\n";
 }

@@ -6,18 +6,19 @@ use Getopt::Std;
 my $Glustervol = "/mnt/gluster";
 my $Jobid = $$;
 
-my ( $Nodelist, $Mapper, $Reducer, $Volname, $Filepath, $Libdir );
+my ( $Hasher, $Nodelist, $Mapper, $Reducer, $Volname, $Filepath, $Libdir );
 
 sub options {
 my %opts;
 
-    getopts( "n:v:m:r:p:d:", \%opts );
-    ( $Nodelist, $Mapper, $Reducer, $Volname, $Filepath, $Libdir )
-        = ( $opts{'n'}, $opts{'m'}, $opts{'r'}, $opts{'v'}, $opts{'p'}, $opts{'d'} );
+    getopts( "k:n:v:m:r:p:d:", \%opts );
+    ( $Hasher, $Nodelist, $Mapper, $Reducer, $Volname, $Filepath, $Libdir )
+        = ( $opts{'k'}, $opts{'n'}, $opts{'m'},
+            $opts{'r'}, $opts{'v'}, $opts{'p'}, $opts{'d'} );
 
     unless ( $Mapper && $Reducer && $Volname && $Filepath && $Libdir ) {
         print <<EOF;
-Usage: spmux_run.pl -v <volume name> -p '<filepath pattern>' -m <map_worker> -r <reduce_worker> -d <libdir> -n <nodelist file> 
+Usage: spmux_run.pl -v volume_name -p 'filepath_pattern' -m map_worker -r reduce_worker [-k key_hasher] -d lib_dir -n nodelist 
 EOF
         exit 0;
     }
@@ -53,7 +54,8 @@ sub mappers {
             # child
             system ( "ssh $node \"rm -rf $Libdir; mkdir -p $Libdir\" >/dev/null 2>&1" );
             system ( "scp $Libdir/* $node:$Libdir/ >/dev/null 2>&1" );
-            system ( "ssh -t $node \"$Libdir/spmux.pl -v $Volname -p '$Filepath' -j $Jobid -w $Libdir/$Mapper map\" >>logs/$Jobid-$node.log 2>&1" );
+            $Hasher = "-k $Libdir/$Hasher" if ( $Hasher );
+            system ( "ssh -t $node \"$Libdir/spmux.pl -v $Volname -p '$Filepath' -j $Jobid -w $Libdir/$Mapper $Hasher map\" >>logs/$Jobid-$node.log 2>&1" );
             system ( "stty sane" );
             exit 0;
         }

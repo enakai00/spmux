@@ -2,27 +2,28 @@
 
 use strict;
 use Getopt::Std;
-use Digest::MD5 qw( md5_hex );
 
 my $Glustervol = "/mnt/gluster";
-my ( $Worker, $Volname, $Filepath, $Jobid, $Brickdir, $Operation );
+my ( $Hasher, $Worker, $Volname, $Filepath, $Jobid, $Brickdir, $Operation );
 
 sub options {
 my %opts;
 
-    getopts( "v:w:p:j:", \%opts );
+    getopts( "k:v:w:p:j:", \%opts );
     ( $Worker, $Volname, $Filepath, $Jobid )
         = ( $opts{'w'}, $opts{'v'}, $opts{'p'}, $opts{'j'} );
+    $Hasher = $opts{'k'} || "md5sum | cut -d' ' -f1";
     $Brickdir =
         `sudo gluster vol info $Volname | grep \$(hostname) | cut -d":" -f3`;
     chomp $Brickdir;
 
     $Operation = $ARGV[ 0 ];
 
-    unless ( $Worker && $Volname && $Filepath && $Jobid && $Brickdir &&
+    unless ( $Hasher && $Worker && $Volname
+            && $Filepath && $Jobid && $Brickdir &&
             $Operation =~ m/(map|reduce)/ ) {
         print <<EOF;
-Usage: spmux_mapper.pl -v <volume name> -p '<filepath pattern>' -w <worker> -j <jobid> [map|reduce]
+Usage: spmux_mapper.pl -v volume_name -p 'filepath_pattern' -w worker -k key_hash -j jobid [map|reduce]
 EOF
         exit 0;
     }
@@ -87,7 +88,7 @@ my ( $volumepath, $hashkey, $line, $statfile );
         system ( "echo \"Succeeded to lock $_\n\"" );
         open ( RESULT, "$Worker $_ |" );
         while ( $line = <RESULT> ) {
-            $hashkey = md5_hex( $line );
+            $hashkey = `echo -n "$line" | $Hasher`; chomp $hashkey;
             open ( OUT, ">>$Glustervol/jobs/$Jobid/mapped/$hashkey" );
             flock ( OUT, 2 );   # blocking write lock.
             print OUT $line;
@@ -102,8 +103,8 @@ my ( $volumepath, $hashkey, $line, $statfile );
 
 MAIN: {
     options();
-    printf ( "Operation:%s\nWorker:%s\nVolume:%s\nFilepath:%s\nJobID:%s\nBrickdir:%s\n",
-            $Operation, $Worker, $Volname, $Filepath, $Jobid, $Brickdir );
+    printf ( "Operation:%s\nHasher:%s\nWorker:%s\nVolume:%s\nFilepath:%s\nJobID:%s\nBrickdir:%s\n",
+            $Operation, $Hasher, $Worker, $Volname, $Filepath, $Jobid, $Brickdir );
 
     system ( "sudo mkdir -p $Glustervol" );
     system ( "sudo mount -t glusterfs localhost:$Volname $Glustervol" );
