@@ -24,8 +24,18 @@ EOF
     }
 }
 
-sub reducers {
-    my ( $pid, $node );
+sub wait_children {
+my $pid;
+
+    do {
+        $pid = wait;
+        print "$pid finished.\n" unless ($pid == -1);
+    } while ( $pid != -1 );
+}
+
+sub run_reducers {
+my $node;
+
     open ( IN,  "<$Nodelist" );
     while ( $node = <IN> ) {
         chomp $node;
@@ -39,14 +49,12 @@ sub reducers {
     close IN;
 
     # parent
-    do {
-        $pid = wait;
-        print "$pid finished.\n" unless ($pid == -1);
-    } while ( $pid != -1 );
+    wait_children();
 }
 
-sub mappers {
-    my ( $pid, $node );
+sub run_mappers {
+my $node;
+
     open ( IN,  "<$Nodelist" );
     while ( $node = <IN> ) {
         chomp $node;
@@ -63,10 +71,7 @@ sub mappers {
     close IN;
 
     # parent
-    do {
-        $pid = wait;
-        print "$pid finished.\n" unless ($pid == -1);
-    } while ( $pid != -1 );
+    wait_children();
 }
 
 MAIN: {
@@ -81,10 +86,10 @@ MAIN: {
     system ( "mkdir -p $Glustervol/jobs/$Jobid/status/map" );
     system ( "mkdir -p $Glustervol/jobs/$Jobid/status/reduce" );
 
-    print "start mapper phase...\n";
-    mappers();
+    print "start map phase...\n";
+    run_mappers();
     print "start reduce phase...\n";
-    reducers();
+    run_reducers();
 }
 
 # vi:ts=4

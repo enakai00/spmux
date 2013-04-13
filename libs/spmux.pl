@@ -19,9 +19,8 @@ my %opts;
 
     $Operation = $ARGV[ 0 ];
 
-    unless ( $Hasher && $Worker && $Volname
-            && $Filepath && $Jobid && $Brickdir &&
-            $Operation =~ m/(map|reduce)/ ) {
+    unless ( $Hasher && $Worker && $Volname && $Filepath && $Jobid
+            && $Brickdir && $Operation =~ m/(map|reduce)/ ) {
         print <<EOF;
 Usage: spmux_mapper.pl -v volume_name -p 'filepath_pattern' -w worker -k key_hash -j jobid [map|reduce]
 EOF
@@ -30,28 +29,29 @@ EOF
 }
 
 sub reducer {
-my ( $outfile, $line, $statfile, $volumepath );
+my ( $brickpath, $volumepath, $outfile, $statfile );
+my ( $line );
 
-    while ( <$Brickdir/jobs/$Jobid/mapped/*> ) {
-        $_ =~ m|$Brickdir/(.*)|;
-        $volumepath = "$Glustervol/$1";
-        $_ =~ m|.*/([^/]+)|;
+    while ( $brickpath = <$Brickdir/jobs/$Jobid/mapped/*> ) {
+        $brickpath =~ m|$Brickdir/(.*)|;
+        $volumepath = "$Glustervol/$1";	# file path on GlusterFS volume
+        $brickpath =~ m|.*/([^/]+)|;
         $statfile = "$Glustervol/jobs/$Jobid/status/reduce/$1";
         $outfile = "$Glustervol/jobs/$Jobid/reduced/$1";
 
         if ( -f $statfile ) {
-            print "$_ is alredy processed\n";
+            print "$brickpath is alredy processed\n";
             next;
         }
         open ( IN, "<$volumepath" );
         unless ( flock ( IN, 6 ) ) {    # non-blocking write lock.
             close IN;
-            print "$_ is now being processed on another node\n";
+            print "$brickpath is now being processed on another node\n";
             next;
         }
 
-        print "Succeeded to lock $_\n";
-        open ( JOB, "$Worker $_|" );
+        print "Succeeded to lock $brickpath\n";
+        open ( JOB, "$Worker $brickpath|" );
         while ( $line = <JOB> ) {
             open ( OUT, ">>$outfile" );
             flock ( OUT, 2 );   # blocking write lock.
@@ -66,35 +66,36 @@ my ( $outfile, $line, $statfile, $volumepath );
 }
 
 sub mapper {
-my ( $volumepath, $hashkey, $line, $statfile );
+my ( $brickpath, $volumepath, $outfile, $statfile );
+my ( $hashkey, $line );
 
-    while ( <$Brickdir/$Filepath> ) {
-        $_ =~ m|$Brickdir/(.*)|;
-        $volumepath = "$Glustervol/$1";
-        $_ =~ m|.*/([^/]+)|;
+    while ( $brickpath = <$Brickdir/$Filepath> ) {
+        $brickpath =~ m|$Brickdir/(.*)|;
+        $volumepath = "$Glustervol/$1";	# file path on GlusterFS volume
+        $brickpath =~ m|.*/([^/]+)|;
         $statfile = "$Glustervol/jobs/$Jobid/status/map/$1";
         if ( -f $statfile ) {
-            print "$_ is alredy processed\n";
+            print "$brickpath is alredy processed\n";
             next;
         }
 
         open ( IN, "<$volumepath" );
         unless ( flock ( IN, 6 ) ) {    # non-blocking write lock.
             close IN;
-            print "$_ is now being processed on another node\n";
+            print "$brickpath is now being processed on another node\n";
             next;
         }
 
-        system ( "echo \"Succeeded to lock $_\n\"" );
-        open ( RESULT, "$Worker $_ |" );
-        while ( $line = <RESULT> ) {
+        print "Succeeded to lock $brickpath\n";
+        open ( JOB, "$Worker $brickpath |" );
+        while ( $line = <JOB> ) {
             $hashkey = `echo -n "$line" | $Hasher`; chomp $hashkey;
             open ( OUT, ">>$Glustervol/jobs/$Jobid/mapped/$hashkey" );
             flock ( OUT, 2 );   # blocking write lock.
             print OUT $line;
             close OUT;
         }
-        close RESULT;
+        close JOB;
 
         system ( "touch $statfile" );   
         close IN;   # Releasing the lock.
