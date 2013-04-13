@@ -107,8 +107,6 @@ MAIN: {
 
     system ( "sudo mkdir -p $Glustervol" );
     system ( "sudo mount -t glusterfs localhost:$Volname $Glustervol" );
-    system ( "sudo mkdir -p $Glustervol/jobs" );
-    system ( "sudo chmod 777 $Glustervol/jobs" );
 
     mapper() if ( $Operation eq "map" );
     reducer() if ( $Operation eq "reduce" );
